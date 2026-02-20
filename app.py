@@ -1,134 +1,115 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import math
 
-# --- CONFIGURACIÓN PROFESIONAL ---
-st.set_page_config(page_title="Novedades Khloe", page_icon="🌹", layout="wide")
+# --- CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="Novedades Khloe", page_icon="🌹", layout="centered")
 
-# CORRECCIÓN DE ERROR TÉCNICO: Se usa 'unsafe_allow_html', no 'stdio'
+# Estilo personalizado (Colores de Novedades Khloe)
 st.markdown("""
     <style>
     .main { background-color: #fff5f7; }
     .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #ffc1cc; }
-    .stButton>button { width: 100%; background-color: #ffc1cc; color: black; border-radius: 10px; }
+    .stButton>button { width: 100%; background-color: #ffc1cc; color: black; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🌹 Novedades Khloe - Sistema de Gestión")
+st.title("🌹 Novedades Khloe - Calculadora")
+st.write("Versión de uso personal (Sin conexión externa)")
 
-# --- CONEXIÓN A GOOGLE SHEETS ---
-conn = st.connection("gsheets", type=GSheetsConnection)
+# --- BASE DE DATOS INTERNA (Sin Excel) ---
+# Aquí definimos tus flores y materiales directamente
+if 'inventario' not in st.session_state:
+    st.session_state.inventario = {
+        "Cinta Roja": 45.72,
+        "Cinta Rosada": 91.44,
+        "Cinta Azul": 45.72,
+        "Silicona": 20.0,
+        "Papel Coreano": 20.0
+    }
 
-def cargar_todo():
-    # Asegúrate de que tus pestañas se llamen exactamente así en el Excel
-    inv = conn.read(worksheet="Inventario")
-    flores = conn.read(worksheet="Flores")
-    return inv, flores
+datos_flores = {
+    "Rosa Eterna": {"petalos": 15, "largo": 8.5},
+    "Rosa Premium": {"petalos": 24, "largo": 10.0},
+    "Girasol": {"petalos": 12, "largo": 12.0}
+}
 
-try:
-    df_inv, df_flores = cargar_todo()
-except Exception as e:
-    st.error("⚠️ Error de conexión: Revisa los 'Secrets' en Streamlit Cloud y que el Excel esté compartido con el correo del robot.")
-    st.stop()
+# --- MENÚ LATERAL: COSTOS ---
+st.sidebar.header("⚙️ Ajustes de Precios")
+p_rollo = st.sidebar.number_input("Precio Rollo (50y)", value=2.50)
+p_papel = st.sidebar.number_input("Precio Papel (20u)", value=2.00)
+p_silic = st.sidebar.number_input("Precio Silicona (8u)", value=1.00)
+p_hora = st.sidebar.number_input("Tu Sueldo por Hora", value=3.00)
 
-# --- PANEL LATERAL DE PRECIOS ---
-with st.sidebar:
-    st.header("⚙️ Ajustar Precios ($)")
-    p_rollo = st.number_input("Precio Rollo Cinta (50y)", value=2.50)
-    p_papel = st.number_input("Precio Paquete Papel (20u)", value=2.00)
-    p_silic = st.number_input("Precio Paquete Silicona (8u)", value=1.00)
-    p_hora = st.number_input("Tu Sueldo por Hora ($)", value=3.00)
-    st.divider()
-    st.write("Configuración de Novedades Khloe")
-
-tab1, tab2, tab3 = st.tabs(["💰 CALCULADORA", "📦 BODEGA", "🌺 MODELOS"])
+tab1, tab2 = st.tabs(["💰 CALCULADORA", "📦 MI BODEGA"])
 
 # ==========================================
-# PESTAÑA 1: CALCULADORA (LA INTELIGENCIA)
+# PESTAÑA 1: CALCULADORA
 # ==========================================
 with tab1:
-    st.subheader("Simulador de Pedido")
-    col1, col2 = st.columns([2, 1])
+    st.header("Simulador de Ramo")
+    col1, col2 = st.columns(2)
     
     with col1:
-        f_tipo = st.selectbox("Modelo de Flor:", df_flores["Tipo_Flor"].tolist())
-        # Filtramos solo materiales que se miden en Metros para el color de la cinta
-        lista_colores = df_inv[df_inv["Unidad"].str.contains("Metros", case=False, na=False)]["Material"].tolist()
-        f_color = st.selectbox("Color de Cinta (Stock):", lista_colores)
+        flor_sel = st.selectbox("Modelo de Flor:", list(datos_flores.keys()))
+        cant_f = st.number_input("¿Cuántas flores?", min_value=1, value=12)
     
     with col2:
-        f_cant = st.number_input("¿Cuántas flores?", min_value=1, value=12)
-        f_tiempo = st.number_input("Minutos de armado:", min_value=5, value=45)
+        color_cinta = st.selectbox("Color de Cinta:", ["Cinta Roja", "Cinta Rosada", "Cinta Azul"])
+        t_minutos = st.number_input("Minutos de trabajo:", min_value=5, value=45)
     
-    l_moño = st.checkbox("¿Lleva Moño Grande? (+1.55m de cinta)")
+    usar_moño = st.checkbox("¿Lleva Moño Grande? (+1.55m)")
 
-    # LÓGICA DE CÁLCULO
-    # Buscamos los datos del modelo elegido en la pestaña Flores
-    datos_f = df_flores[df_flores["Tipo_Flor"] == f_tipo].iloc[0]
+    # LÓGICA MATEMÁTICA
+    info = datos_flores[flor_sel]
+    # Metros de cinta
+    m_necesarios = cant_f * ((info['largo'] / 100) * info['petalos'])
+    if usar_moño: m_necesarios += 1.55
     
-    # Metros de cinta: cantidad de flores * (largo pétalo en metros * cantidad de pétalos)
-    m_cinta = f_cant * ((datos_f["Largo_Petalo_cm"] / 100) * datos_f["Cantidad_Petalos"])
-    if l_moño: 
-        m_cinta += 1.55
-    
-    # Cálculo de otros materiales
-    b_silic = (f_cant * 0.5) + 2.0  # 0.5 barras por flor + 2 para la base
-    p_hojas = 1.75 * math.sqrt(f_cant / 8) # Proporción de papel coreano
+    # Otros materiales
+    b_silic = (cant_f * 0.5) + 2.0
+    p_hojas = 1.75 * math.sqrt(cant_f / 8)
 
-    # COSTOS REALES (Fórmula: Material x 3 + Mano de obra)
-    costo_mat = (m_cinta * (p_rollo/45.72)) + (b_silic * (p_silic/8)) + (p_hojas * (p_papel/20))
-    costo_mano = (f_tiempo / 60) * p_hora
-    p_sugerido = (costo_mat * 3) + costo_mano
+    # CÁLCULO DE DINERO
+    costo_material = (m_necesarios * (p_rollo/45.72)) + (b_silic * (p_silic/8)) + (p_hojas * (p_papel/20))
+    costo_obra = (t_minutos / 60) * p_hora
+    precio_sugerido = (costo_material * 3) + costo_obra
 
     st.markdown("---")
-    st.subheader("Gastos y Precio de Venta")
-    res1, res2, res3, res4 = st.columns(4)
-    res1.metric("Cinta", f"{m_cinta:.2f} m")
-    res2.metric("Silicona", f"{b_silic:.1f} bar")
-    res3.metric("Papel", f"{p_hojas:.1f} plieg")
-    res4.metric("SUGERIDO", f"${p_sugerido:.2f}", delta=f"Costo: ${costo_mat:.2f}")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Cinta", f"{m_necesarios:.2f} m")
+    c2.metric("Silicona", f"{b_silic:.1f} bar")
+    c3.metric("Papel", f"{p_hojas:.1f} plie")
 
-    if st.button("🚀 REGISTRAR VENTA (DESCONTAR STOCK)"):
-        # Actualizamos el inventario localmente
-        df_inv.loc[df_inv["Material"] == f_color, "Cantidad"] -= m_cinta
-        df_inv.loc[df_inv["Material"] == "Silicona", "Cantidad"] -= b_silic
-        
-        # Enviamos la actualización a Google Sheets
-        conn.update(worksheet="Inventario", data=df_inv)
-        st.success(f"✅ Venta registrada: Se descontaron {m_cinta:.2f}m de {f_color} y {b_silic:.1f} barras de silicona.")
-        st.balloons()
+    st.subheader(f"Precio Sugerido: ${precio_sugerido:.2f}")
+    st.caption(f"Costo de materiales: ${costo_material:.2f} | Mano de obra: ${costo_obra:.2f}")
+
+    if st.button("🚀 DESCONTAR DE MI BODEGA"):
+        if st.session_state.inventario[color_cinta] >= m_necesarios:
+            st.session_state.inventario[color_cinta] -= m_necesarios
+            st.session_state.inventario["Silicona"] -= b_silic
+            st.success(f"¡Venta realizada! Se descontó material de la bodega local.")
+            st.balloons()
+        else:
+            st.error("No tienes suficiente cinta en bodega para este pedido.")
 
 # ==========================================
-# PESTAÑA 2: GESTIÓN DE BODEGA
+# PESTAÑA 2: MI BODEGA
 # ==========================================
 with tab2:
-    st.subheader("Inventario en Tiempo Real")
-    st.dataframe(df_inv, use_container_width=True)
-    
-    with st.expander("➕ Cargar nueva compra de material"):
-        mat_add = st.selectbox("¿Qué compraste?", df_inv["Material"].tolist())
-        cant_add = st.number_input("Cantidad nueva:", min_value=0.1)
-        if st.button("Actualizar Inventario"):
-            df_inv.loc[df_inv["Material"] == mat_add, "Cantidad"] += cant_add
-            conn.update(worksheet="Inventario", data=df_inv)
-            st.success("¡Inventario actualizado!")
-            st.rerun()
+    st.header("Estado de mi Inventario")
+    for mat, cant in st.session_state.inventario.items():
+        # Mostrar barra de progreso visual
+        st.write(f"**{mat}**: {cant:.2f}")
+        st.progress(min(cant / 100, 1.0))
 
-# ==========================================
-# PESTAÑA 3: CATÁLOGO DE FLORES
-# ==========================================
-with tab3:
-    st.subheader("Modelos Guardados")
-    st.table(df_flores)
-    
-    if st.checkbox("➕ Agregar Modelo Nuevo"):
-        n_flor = st.text_input("Nombre de la flor:")
-        n_largo = st.number_input("Largo de pétalo (cm):", value=10.0)
-        n_peta = st.number_input("Cantidad de pétalos:", value=15)
-        if st.button("Guardar Modelo"):
-            nueva_f = pd.DataFrame({"Tipo_Flor": [n_flor], "Largo_Petalo_cm": [n_largo], "Cantidad_Petalos": [n_peta]})
-            df_flores = pd.concat([df_flores, nueva_f], ignore_index=True)
-            conn.update(worksheet="Flores", data=df_flores)
-            st.success("Nuevo modelo guardado.")
-            st.rerun()
+    st.divider()
+    if st.button("♻️ Recargar Inventario (Valores iniciales)"):
+        st.session_state.inventario = {
+            "Cinta Roja": 45.72,
+            "Cinta Rosada": 91.44,
+            "Cinta Azul": 45.72,
+            "Silicona": 20.0,
+            "Papel Coreano": 20.0
+        }
+        st.rerun()
